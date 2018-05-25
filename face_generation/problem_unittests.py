@@ -57,8 +57,8 @@ class TmpMock():
 
 @test_safe
 def test_model_inputs(model_inputs):
-    image_width = 28
-    image_height = 28
+    image_width = 32
+    image_height = 32
     image_channels = 3
     z_dim = 100
     input_real, input_z, learn_rate = model_inputs(image_width, image_height, image_channels, z_dim)
@@ -71,9 +71,11 @@ def test_model_inputs(model_inputs):
 @test_safe
 def test_discriminator(discriminator, tf_module):
     with TmpMock(tf_module, 'variable_scope') as mock_variable_scope:
-        image = tf.placeholder(tf.float32, [None, 28, 28, 3])
+        image = tf.placeholder(tf.float32, [None, 32, 32, 3])
+        leak = 0.1
+        drop = 0.3 
 
-        output, logits = discriminator(image)
+        output, logits = discriminator(image, leak, drop)
         _assert_tensor_shape(output, [None, 1], 'Discriminator Training(reuse=false) output')
         _assert_tensor_shape(logits, [None, 1], 'Discriminator Training(reuse=false) Logits')
         assert mock_variable_scope.called,\
@@ -83,7 +85,7 @@ def test_discriminator(discriminator, tf_module):
 
         mock_variable_scope.reset_mock()
 
-        output_reuse, logits_reuse = discriminator(image, True)
+        output_reuse, logits_reuse = discriminator(image, leak, drop, True)
         _assert_tensor_shape(output_reuse, [None, 1], 'Discriminator Inference(reuse=True) output')
         _assert_tensor_shape(logits_reuse, [None, 1], 'Discriminator Inference(reuse=True) Logits')
         assert mock_variable_scope.called, \
@@ -97,17 +99,18 @@ def test_generator(generator, tf_module):
     with TmpMock(tf_module, 'variable_scope') as mock_variable_scope:
         z = tf.placeholder(tf.float32, [None, 100])
         out_channel_dim = 5
+        leak = 0.1
 
-        output = generator(z, out_channel_dim)
-        _assert_tensor_shape(output, [None, 28, 28, out_channel_dim], 'Generator output (is_train=True)')
+        output = generator(z, out_channel_dim, leak)
+        _assert_tensor_shape(output, [None, 32, 32, out_channel_dim], 'Generator output (is_train=True)')
         assert mock_variable_scope.called, \
             'tf.variable_scope not called in Generator Training(reuse=false)'
         assert mock_variable_scope.call_args == mock.call('generator', reuse=False), \
             'tf.variable_scope called with wrong arguments in Generator Training(reuse=false)'
 
         mock_variable_scope.reset_mock()
-        output = generator(z, out_channel_dim, False)
-        _assert_tensor_shape(output, [None, 28, 28, out_channel_dim], 'Generator output (is_train=False)')
+        output = generator(z, out_channel_dim, leak, False)
+        _assert_tensor_shape(output, [None, 32, 32, out_channel_dim], 'Generator output (is_train=False)')
         assert mock_variable_scope.called, \
             'tf.variable_scope not called in Generator Inference(reuse=True)'
         assert mock_variable_scope.call_args == mock.call('generator', reuse=True), \
@@ -117,10 +120,13 @@ def test_generator(generator, tf_module):
 @test_safe
 def test_model_loss(model_loss):
     out_channel_dim = 4
-    input_real = tf.placeholder(tf.float32, [None, 28, 28, out_channel_dim])
+    leak = 0.1
+    drop = 0.3 
+        
+    input_real = tf.placeholder(tf.float32, [None, 32, 32, out_channel_dim])
     input_z = tf.placeholder(tf.float32, [None, 100])
 
-    d_loss, g_loss = model_loss(input_real, input_z, out_channel_dim)
+    d_loss, g_loss = model_loss(input_real, input_z, leak, drop, out_channel_dim)
 
     _assert_tensor_shape(d_loss, [], 'Discriminator Loss')
     _assert_tensor_shape(d_loss, [], 'Generator Loss')
